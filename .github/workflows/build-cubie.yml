@@ -30,73 +30,87 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: Verify device target exists in this branch
+        run: |
+          # Bail early with a clear error instead of letting defconfig
+          # silently drop an unknown DEVICE_ symbol.
+          if ! grep -rq "radxa_cubie-a5e" target/linux/sunxi/image/armv82.mk 2>/dev/null; then
+            echo "ERROR: radxa_cubie-a5e device profile not found in target/linux/sunxi/image/armv82.mk"
+            echo "The PR branch may not have this device wired up yet, or the profile name differs."
+            echo "Available armv82 devices:"
+            grep -oP '^define Device/\K.*' target/linux/sunxi/image/armv82.mk || true
+            exit 1
+          fi
+
       - name: Inject Master Configuration Settings
         run: |
           # 1. Base Machine Target Profiling & Storage Expansion
-          echo "CONFIG_TARGET_sunxi=y" > .config
-          echo "CONFIG_TARGET_sunxi_armv82=y" >> .config
-          echo "CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" >> .config
-          
-          # Force the compiler to increase storage allocation limits for Docker/AdGuard Home
-          echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
-          echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
+          cat > .config << 'EOF'
+          CONFIG_TARGET_sunxi=y
+          CONFIG_TARGET_sunxi_armv82=y
+          CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y
+          CONFIG_TARGET_KERNEL_PARTSIZE=64
+          CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 
-          
           # 2. Base Core Interfaces & Traffic Utilities
-          echo "CONFIG_PACKAGE_luci=y" >> .config
-          echo "CONFIG_PACKAGE_vnstat2=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-vnstat2=y" >> .config
-          
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_vnstat2=y
+          CONFIG_PACKAGE_luci-app-vnstat2=y
+
           # 3. Native Terminal, File Manager, Network Monitoring & Watchdog
-          echo "CONFIG_PACKAGE_ttyd=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-ttyd=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-filemanager=y" >> .config
-          echo "CONFIG_PACKAGE_nlbwmon=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-nlbwmon=y" >> .config
-          echo "CONFIG_PACKAGE_watchcat=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-watchcat=y" >> .config
-          
+          CONFIG_PACKAGE_ttyd=y
+          CONFIG_PACKAGE_luci-app-ttyd=y
+          CONFIG_PACKAGE_luci-app-filemanager=y
+          CONFIG_PACKAGE_nlbwmon=y
+          CONFIG_PACKAGE_luci-app-nlbwmon=y
+          CONFIG_PACKAGE_watchcat=y
+          CONFIG_PACKAGE_luci-app-watchcat=y
+
           # 4. Smart Queue Management (SQM) & Smart Bufferbloat Control
-          echo "CONFIG_PACKAGE_sqm-scripts=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-sqm=y" >> .config
-          
+          CONFIG_PACKAGE_sqm-scripts=y
+          CONFIG_PACKAGE_luci-app-sqm=y
+
           # 5. Core Filtering AdGuard Home Integration Stack
-          echo "CONFIG_PACKAGE_adguardhome=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> .config
-          
+          CONFIG_PACKAGE_adguardhome=y
+          CONFIG_PACKAGE_luci-app-adguardhome=y
+
           # 6. Integrate Complete Docker Container Stack Engine
-          echo "CONFIG_PACKAGE_docker=y" >> .config
-          echo "CONFIG_PACKAGE_dockerd=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> .config
-          echo "CONFIG_KERNEL_CGROUPS=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-veth=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-fs-btrfs=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-ipt-extra=y" >> .config
-          
+          CONFIG_PACKAGE_docker=y
+          CONFIG_PACKAGE_dockerd=y
+          CONFIG_PACKAGE_luci-app-dockerman=y
+          CONFIG_KERNEL_CGROUPS=y
+          CONFIG_PACKAGE_kmod-veth=y
+          CONFIG_PACKAGE_kmod-fs-btrfs=y
+          CONFIG_PACKAGE_kmod-ipt-extra=y
+
           # 7. Enable High Performance Full Cone NAT (NAT1)
-          echo "CONFIG_PACKAGE_iptables-mod-fullconenat=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-ipt-fullconenat=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-nft-fullconenat=y" >> .config
-          
+          CONFIG_PACKAGE_iptables-mod-fullconenat=y
+          CONFIG_PACKAGE_kmod-ipt-fullconenat=y
+          CONFIG_PACKAGE_kmod-nft-fullconenat=y
+
           # 8. High Performance Optimizations (BBR TCP, Core Balancing & Crypto Acceleration)
-          echo "CONFIG_KERNEL_TCP_CONG_BBR=y" >> .config
-          echo "CONFIG_PACKAGE_irqbalance=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-irqbalance=y" >> .config
-          echo "CONFIG_PACKAGE_libopenssl-armv8=y" >> .config
-          
+          CONFIG_KERNEL_TCP_CONG_BBR=y
+          CONFIG_PACKAGE_irqbalance=y
+          CONFIG_PACKAGE_luci-app-irqbalance=y
+          EOF
+
           make defconfig
 
-      - name: Hardcode Local APK Feeds Out-of-the-box
+          # Fail loudly if defconfig dropped our device symbol
+          if ! grep -q "^CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" .config; then
+            echo "ERROR: device symbol was dropped by 'make defconfig' â€” the profile name is wrong or unavailable on this branch."
+            exit 1
+          fi
+
+      - name: Configure APK feeds (informational only, not used by build)
         run: |
-          mkdir -p files/etc/apk/repositories.d
-          echo "https://openwrt.org" > files/etc/apk/repositories.d/distfeeds.list
-          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
-          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
-          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
-          
-          mkdir -p files/etc/apk
-          echo "aarch64_armv8.2-a" > files/etc/apk/arch
-          echo "aarch64_generic" >> files/etc/apk/arch
+          # Note: these repositories.d files only matter for the *runtime*
+          # opkg/apk config baked into the image, not for building.
+          # openwrt.org itself is not a valid apk index endpoint â€” replace
+          # these with real feed URLs (e.g. your own mirror) before relying
+          # on them, or drop this step if you don't need custom in-image feeds.
+          mkdir -p files/etc/opkg
+          true
 
       - name: Download source files
         run: make download -j8
