@@ -1,4 +1,4 @@
-name: Build Ultimate Radxa Cubie A5E OpenWRT
+name: Build Radxa Cubie A5E OpenWRT
 
 on:
   workflow_dispatch:
@@ -19,45 +19,43 @@ jobs:
             g++-multilib gettext git libncurses5-dev libssl-dev python3-setuptools \
             rsync swig unzip zlib1g-dev file wget quilt cpio
 
-      - name: Checkout Developer PR Branch Directly
+      - name: Checkout Developer PR Branch
         uses: actions/checkout@v4
         with:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
+
+      - name: Cache OpenWRT Toolchain
+        uses: actions/cache@v4
+        with:
+          path: staging_dir/toolchain-*
+          key: ${{ runner.os }}-openwrt-cortexa55-${{ hashFiles('target/linux/sunxi/Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-openwrt-cortexa55-
 
       - name: Update and Install Feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Verify device target exists in this branch
-        run: |
-          # Bail early with a clear error instead of letting defconfig
-          # silently drop an unknown DEVICE_ symbol.
-          if ! grep -rq "radxa_cubie-a5e" target/linux/sunxi/image/armv82.mk 2>/dev/null; then
-            echo "ERROR: radxa_cubie-a5e device profile not found in target/linux/sunxi/image/armv82.mk"
-            echo "The PR branch may not have this device wired up yet, or the profile name differs."
-            echo "Available armv82 devices:"
-            grep -oP '^define Device/\K.*' target/linux/sunxi/image/armv82.mk || true
-            exit 1
-          fi
-
       - name: Inject Master Configuration Settings
         run: |
-          # 1. Base Machine Target Profiling & Storage Expansion
+          # Correct device symbol is "cubie-a5e" — NOT "radxa_cubie-a5e".
+          # DEVICE_VENDOR is just a display label in the .mk file, it is
+          # not part of the Kconfig symbol. Confirmed against:
+          # target/linux/sunxi/image/cortexa55.mk -> TARGET_DEVICES += cubie-a5e
           cat > .config << 'EOF'
           CONFIG_TARGET_sunxi=y
-          CONFIG_TARGET_sunxi_armv82=y
-          CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y
+          CONFIG_TARGET_sunxi_cortexa55=y
+          CONFIG_TARGET_sunxi_cortexa55_DEVICE_cubie-a5e=y
           CONFIG_TARGET_KERNEL_PARTSIZE=64
           CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 
-          # 2. Base Core Interfaces & Traffic Utilities
           CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_dnsmasq-full=y
           CONFIG_PACKAGE_vnstat2=y
           CONFIG_PACKAGE_luci-app-vnstat2=y
 
-          # 3. Native Terminal, File Manager, Network Monitoring & Watchdog
           CONFIG_PACKAGE_ttyd=y
           CONFIG_PACKAGE_luci-app-ttyd=y
           CONFIG_PACKAGE_luci-app-filemanager=y
@@ -66,15 +64,14 @@ jobs:
           CONFIG_PACKAGE_watchcat=y
           CONFIG_PACKAGE_luci-app-watchcat=y
 
-          # 4. Smart Queue Management (SQM) & Smart Bufferbloat Control
           CONFIG_PACKAGE_sqm-scripts=y
           CONFIG_PACKAGE_luci-app-sqm=y
 
-          # 5. Core Filtering AdGuard Home Integration Stack
           CONFIG_PACKAGE_adguardhome=y
           CONFIG_PACKAGE_luci-app-adguardhome=y
+          CONFIG_PACKAGE_cloudflared=y
+          CONFIG_PACKAGE_luci-app-cloudflared=y
 
-          # 6. Integrate Complete Docker Container Stack Engine
           CONFIG_PACKAGE_docker=y
           CONFIG_PACKAGE_dockerd=y
           CONFIG_PACKAGE_luci-app-dockerman=y
@@ -83,34 +80,52 @@ jobs:
           CONFIG_PACKAGE_kmod-fs-btrfs=y
           CONFIG_PACKAGE_kmod-ipt-extra=y
 
-          # 7. Enable High Performance Full Cone NAT (NAT1)
           CONFIG_PACKAGE_iptables-mod-fullconenat=y
           CONFIG_PACKAGE_kmod-ipt-fullconenat=y
           CONFIG_PACKAGE_kmod-nft-fullconenat=y
 
-          # 8. High Performance Optimizations (BBR TCP, Core Balancing & Crypto Acceleration)
           CONFIG_KERNEL_TCP_CONG_BBR=y
           CONFIG_PACKAGE_irqbalance=y
           CONFIG_PACKAGE_luci-app-irqbalance=y
+
+          CONFIG_PACKAGE_iptables=y
+          CONFIG_PACKAGE_iptables-nft=y
+          CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
+          CONFIG_PACKAGE_iptables-mod-nat-extra=y
+          CONFIG_PACKAGE_iptables-mod-ipopt=y
+          CONFIG_PACKAGE_kmod-ipt-nat=y
+          CONFIG_PACKAGE_kmod-ipt-conntrack=y
+
+          CONFIG_PACKAGE_libstdcpp=y
+          CONFIG_PACKAGE_libpthread=y
+          CONFIG_PACKAGE_librt=y
+          CONFIG_PACKAGE_libev=y
+          CONFIG_PACKAGE_libuv=y
+          CONFIG_PACKAGE_libevent2=y
+          CONFIG_PACKAGE_zlib=y
+          CONFIG_PACKAGE_libopenssl=y
+          CONFIG_PACKAGE_libmbedtls=y
+          CONFIG_PACKAGE_libnetfilter-conntrack=y
+          CONFIG_PACKAGE_libnfnetlink=y
+          CONFIG_PACKAGE_libmnl=y
+          CONFIG_PACKAGE_bash=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_wget-ssl=y
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_ca-certificates=y
           EOF
 
           make defconfig
 
-          # Fail loudly if defconfig dropped our device symbol
-          if ! grep -q "^CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" .config; then
-            echo "ERROR: device symbol was dropped by 'make defconfig' â€” the profile name is wrong or unavailable on this branch."
+          # Fail loudly (not silently) if the symbol didn't take.
+          if ! grep -q "^CONFIG_TARGET_sunxi_cortexa55_DEVICE_cubie-a5e=y" .config; then
+            echo "ERROR: cubie-a5e device symbol missing after defconfig."
+            echo "Devices actually available in this subtarget's .config template:"
+            grep "DEVICE_" .config.old 2>/dev/null || true
             exit 1
           fi
-
-      - name: Configure APK feeds (informational only, not used by build)
-        run: |
-          # Note: these repositories.d files only matter for the *runtime*
-          # opkg/apk config baked into the image, not for building.
-          # openwrt.org itself is not a valid apk index endpoint â€” replace
-          # these with real feed URLs (e.g. your own mirror) before relying
-          # on them, or drop this step if you don't need custom in-image feeds.
-          mkdir -p files/etc/opkg
-          true
+          echo "Device symbol confirmed:"
+          grep "DEVICE_cubie-a5e" .config
 
       - name: Download source files
         run: make download -j8
@@ -118,8 +133,8 @@ jobs:
       - name: Compile Master Image
         run: make -j$(nproc) || make -j1 V=s
 
-      - name: Upload Ultimate Flashable Image File
+      - name: Upload Flashable Image File
         uses: actions/upload-artifact@v4
         with:
-          name: Ultimate_Radxa_A5E_OpenWRT
-          path: bin/targets/sunxi/armv82/*
+          name: Radxa_A5E_OpenWRT
+          path: bin/targets/sunxi/cortexa55/*
