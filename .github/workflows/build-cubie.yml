@@ -1,4 +1,4 @@
-name: Build Ultimate Native Radxa Cubie A5E
+name: Build Ultimate Radxa Cubie A5E OpenWRT
 
 on:
   workflow_dispatch:
@@ -25,51 +25,29 @@ jobs:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
 
-      - name: Cache OpenWRT Toolchain (Speeds up next builds!)
-        uses: actions/cache@v4
-        with:
-          path: staging_dir/toolchain-*
-          key: ${{ runner.os }}-openwrt-cortexa55-${{ hashFiles('target/linux/sunxi/Makefile') }}
-          restore-keys: |
-            ${{ runner.os }}-openwrt-cortexa55-
-
-      - name: Strip Out Avaota A1 Configuration Blocks Completely
-        run: |
-          # Forcefully remove the secondary device node profile loop from image targets
-          if [ -f target/linux/sunxi/image/cortexa55.mk ]; then
-            sed -i '/define Device\/avaota-a1/,/endef/d' target/linux/sunxi/image/cortexa55.mk || true
-            sed -i 's/TARGET_DEVICES += avaota-a1//g' target/linux/sunxi/image/cortexa55.mk || true
-          fi
-          
-          # Clean out reference entries from the primary bootloader Makefile configuration rules
-          if [ -f package/boot/uboot-sunxi/Makefile ]; then
-            sed -i '/avaota-a1/d' package/boot/uboot-sunxi/Makefile || true
-          fi
-
       - name: Update and Install Feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Inject Master Optimization & Package Settings
+      - name: Inject Master Configuration Settings
         run: |
-          # 1. Target Machine Profiling (Using the developer's official fixed target strings!)
+          # 1. Base Machine Target Profiling & Storage Expansion
           echo "CONFIG_TARGET_sunxi=y" > .config
-          echo "CONFIG_TARGET_sunxi_cortexa55=y" >> .config
-          echo "CONFIG_TARGET_sunxi_cortexa55_DEVICE_radxa_cubie-a5e=y" >> .config
+          echo "CONFIG_TARGET_sunxi_armv82=y" >> .config
+          echo "CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" >> .config
           
-          # 2. Storage Partition Size Expansion (Prevents image compilation overflow)
+          # Force the compiler to increase storage allocation limits for Docker/AdGuard Home
           echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
           echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
+
           
-          # 3. Base Routing Enhancements (Drop basic dnsmasq, bake feature-complete dnsmasq-full)
+          # 2. Base Core Interfaces & Traffic Utilities
           echo "CONFIG_PACKAGE_luci=y" >> .config
-          echo "CONFIG_PACKAGE_dnsmasq=n" >> .config
-          echo "CONFIG_PACKAGE_dnsmasq-full=y" >> .config
           echo "CONFIG_PACKAGE_vnstat2=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-vnstat2=y" >> .config
           
-          # 4. Terminal Emulator, File Manager, Real-time Monitors & Watchdog
+          # 3. Native Terminal, File Manager, Network Monitoring & Watchdog
           echo "CONFIG_PACKAGE_ttyd=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-ttyd=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-filemanager=y" >> .config
@@ -78,19 +56,15 @@ jobs:
           echo "CONFIG_PACKAGE_watchcat=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-watchcat=y" >> .config
           
-          # 5. Smart Queue Management (SQM) Bufferbloat Mitigation Controls
+          # 4. Smart Queue Management (SQM) & Smart Bufferbloat Control
           echo "CONFIG_PACKAGE_sqm-scripts=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-sqm=y" >> .config
           
-          # 6. AdGuard Home Core Service & LuCI Web View Interface Integration
+          # 5. Core Filtering AdGuard Home Integration Stack
           echo "CONFIG_PACKAGE_adguardhome=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> .config
-
-          # 7. Cloudflare Tunnels (Zero Trust Daemon Engine & LuCI Management Tab)
-          echo "CONFIG_PACKAGE_cloudflared=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-cloudflared=y" >> .config
           
-          # 8. Complete Integrated Container Stack Layer (Docker Engine Suite)
+          # 6. Integrate Complete Docker Container Stack Engine
           echo "CONFIG_PACKAGE_docker=y" >> .config
           echo "CONFIG_PACKAGE_dockerd=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> .config
@@ -99,46 +73,30 @@ jobs:
           echo "CONFIG_PACKAGE_kmod-fs-btrfs=y" >> .config
           echo "CONFIG_PACKAGE_kmod-ipt-extra=y" >> .config
           
-          # 9. High Performance Full Cone NAT (NAT1 Gaming Pipe Engine)
+          # 7. Enable High Performance Full Cone NAT (NAT1)
           echo "CONFIG_PACKAGE_iptables-mod-fullconenat=y" >> .config
           echo "CONFIG_PACKAGE_kmod-ipt-fullconenat=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nft-fullconenat=y" >> .config
           
-          # 10. Hardware Extensions (Monolithic Google BBR TCP, Core Load Balancing & Crypto Engine)
+          # 8. High Performance Optimizations (BBR TCP, Core Balancing & Crypto Acceleration)
           echo "CONFIG_KERNEL_TCP_CONG_BBR=y" >> .config
           echo "CONFIG_PACKAGE_irqbalance=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-irqbalance=y" >> .config
           echo "CONFIG_PACKAGE_libopenssl-armv8=y" >> .config
-
-          # 11. Inject Full Legacy IPTables Dependency Packs (Fixes nodogsplash & older utils)
-          echo "CONFIG_PACKAGE_iptables=y" >> .config
-          echo "CONFIG_PACKAGE_iptables-nft=y" >> .config
-          echo "CONFIG_PACKAGE_iptables-mod-conntrack-extra=y" >> .config
-          echo "CONFIG_PACKAGE_iptables-mod-nat-extra=y" >> .config
-          echo "CONFIG_PACKAGE_iptables-mod-ipopt=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-ipt-nat=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-ipt-conntrack=y" >> .config
-          
-          # 12. UNIVERSAL COMPATIBILITY MATRIX (Pre-baking missing standard libraries)
-          echo "CONFIG_PACKAGE_libstdcpp=y" >> .config
-          echo "CONFIG_PACKAGE_libpthread=y" >> .config
-          echo "CONFIG_PACKAGE_librt=y" >> .config
-          echo "CONFIG_PACKAGE_libev=y" >> .config
-          echo "CONFIG_PACKAGE_libuv=y" >> .config
-          echo "CONFIG_PACKAGE_libevent2=y" >> .config
-          echo "CONFIG_PACKAGE_zlib=y" >> .config
-          echo "CONFIG_PACKAGE_libopenssl=y" >> .config
-          echo "CONFIG_PACKAGE_libmbedtls=y" >> .config
-          echo "CONFIG_PACKAGE_libnetfilter-conntrack=y" >> .config
-          echo "CONFIG_PACKAGE_libnfnetlink=y" >> .config
-          echo "CONFIG_PACKAGE_libmnl=y" >> .config
-          echo "CONFIG_PACKAGE_bash=y" >> .config
-          echo "CONFIG_PACKAGE_curl=y" >> .config
-          echo "CONFIG_PACKAGE_wget-ssl=y" >> .config
-          echo "CONFIG_PACKAGE_ca-bundle=y" >> .config
-          echo "CONFIG_PACKAGE_ca-certificates=y" >> .config
           
           make defconfig
+
+      - name: Hardcode Local APK Feeds Out-of-the-box
+        run: |
+          mkdir -p files/etc/apk/repositories.d
+          echo "https://openwrt.org" > files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          
+          mkdir -p files/etc/apk
+          echo "aarch64_armv8.2-a" > files/etc/apk/arch
+          echo "aarch64_generic" >> files/etc/apk/arch
 
       - name: Download source files
         run: make download -j8
@@ -146,8 +104,8 @@ jobs:
       - name: Compile Master Image
         run: make -j$(nproc) || make -j1 V=s
 
-      - name: Upload Perfect Flashable Image File
+      - name: Upload Ultimate Flashable Image File
         uses: actions/upload-artifact@v4
         with:
-          name: Ultimate_Native_Radxa_A5E_OpenWRT
-          path: bin/targets/sunxi/cortexa55/*
+          name: Ultimate_Radxa_A5E_OpenWRT
+          path: bin/targets/sunxi/armv82/*
