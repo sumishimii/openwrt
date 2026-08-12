@@ -1,4 +1,4 @@
-name: Build Radxa Cubie A5E OpenWrt
+name: Build Ultimate Radxa Cubie A5E OpenWRT
 
 on:
   workflow_dispatch:
@@ -6,494 +6,135 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-
-      # ============================================================
-      # 1. Free GitHub runner disk space
-      # ============================================================
       - name: Free up GitHub runner disk space
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
-          df -h
 
-
-      # ============================================================
-      # 2. Install dependencies
-      # ============================================================
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib \
+            g++-multilib gettext git libncurses5-dev libssl-dev python3-setuptools \
+            rsync swig unzip zlib1g-dev file wget quilt cpio
 
-          sudo apt-get install -y \
-            build-essential \
-            clang \
-            flex \
-            bison \
-            g++ \
-            gawk \
-            gcc-multilib \
-            g++-multilib \
-            gettext \
-            git \
-            libncurses-dev \
-            libssl-dev \
-            python3 \
-            python3-setuptools \
-            python3-pip \
-            rsync \
-            swig \
-            unzip \
-            zlib1g-dev \
-            file \
-            wget \
-            quilt \
-            cpio \
-            bc \
-            libelf-dev \
-            libdw-dev
-
-
-      # ============================================================
-      # 3. Checkout A527 / Cubie A5E branch
-      # ============================================================
-      - name: Checkout sunxi A527 support branch
+      - name: Checkout Developer PR Branch Directly
         uses: actions/checkout@v4
         with:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
-          fetch-depth: 1
 
-
-      # ============================================================
-      # 4. Show revision
-      # ============================================================
-      - name: Show source revision
-        run: |
-          echo "Branch:"
-          git branch --show-current
-
-          echo "Commit:"
-          git rev-parse HEAD
-
-
-      # ============================================================
-      # 5. Update feeds
-      # ============================================================
-      - name: Update and install feeds
+      - name: Update and Install Feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-
-      # ============================================================
-      # 6. Configure OpenWrt
-      # ============================================================
-      - name: Configure Radxa Cubie A5E
+      - name: Inject Master Configuration Settings
         run: |
+          # 1. Base Machine Target Profiling & Storage Expansion
+          echo "CONFIG_TARGET_sunxi=y" > .config
+          echo "CONFIG_TARGET_sunxi_armv82=y" >> .config
+          echo "CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" >> .config
+
+          # Force the compiler to increase storage allocation limits for Docker/AdGuard Home
+          echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
+          echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
+
+          # 2. Base Core Interfaces & Traffic Utilities
+          echo "CONFIG_PACKAGE_luci=y" >> .config
+          echo "CONFIG_PACKAGE_vnstat2=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-vnstat2=y" >> .config
+
+          # 3. Native Terminal, File Manager, Network Monitoring & Watchdog
+          echo "CONFIG_PACKAGE_ttyd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-ttyd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-filemanager=y" >> .config
+          echo "CONFIG_PACKAGE_nlbwmon=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-nlbwmon=y" >> .config
+          echo "CONFIG_PACKAGE_watchcat=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-watchcat=y" >> .config
+
+          # 4. Smart Queue Management (SQM) & Smart Bufferbloat Control
+          echo "CONFIG_PACKAGE_sqm-scripts=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-sqm=y" >> .config
+
+          # 5. Core Filtering AdGuard Home Integration Stack
+          echo "CONFIG_PACKAGE_adguardhome=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> .config
+
+          # 6. Integrate Complete Docker Container Stack Engine
+          echo "CONFIG_PACKAGE_docker=y" >> .config
+          echo "CONFIG_PACKAGE_dockerd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> .config
+          echo "CONFIG_KERNEL_CGROUPS=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-veth=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-fs-btrfs=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-extra=y" >> .config
+
+          # 7. Enable High Performance Full Cone NAT (NAT1)
+          echo "CONFIG_PACKAGE_iptables-mod-fullconenat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-fullconenat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nft-fullconenat=y" >> .config
+
+          # 8. High Performance Optimizations (BBR TCP, Core Balancing & Crypto Acceleration)
+          echo "CONFIG_KERNEL_TCP_CONG_BBR=y" >> .config
+          echo "CONFIG_PACKAGE_irqbalance=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-irqbalance=y" >> .config
+          echo "CONFIG_PACKAGE_libopenssl-armv8=y" >> .config
+
+          # 9. 464XLAT (CLAT) support for IPv6-only WAN / NAT64 uplinks
+          echo "CONFIG_PACKAGE_464xlat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nat46=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-ipv6=y" >> .config
+
+          # 10. VLAN support (802.1q tagging + LuCI bridge VLAN filtering, DSA-based)
+          echo "CONFIG_PACKAGE_kmod-8021q=y" >> .config
+          echo "CONFIG_PACKAGE_luci-mod-network=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-vlan=y" >> .config
 
-          cat > .config <<'EOF'
-
-          # ==========================================================
-          # TARGET
-          # ==========================================================
-
-          CONFIG_TARGET_sunxi=y
-          CONFIG_TARGET_sunxi_armv82=y
-          CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y
-
-
-          # ==========================================================
-          # IMAGE SIZE
-          # ==========================================================
-
-          CONFIG_TARGET_KERNEL_PARTSIZE=64
-          CONFIG_TARGET_ROOTFS_PARTSIZE=1024
-
-
-          # ==========================================================
-          # LUCI
-          # ==========================================================
-
-          CONFIG_PACKAGE_luci=y
-
-
-          # ==========================================================
-          # VNSTAT
-          # ==========================================================
-
-          CONFIG_PACKAGE_vnstat2=y
-          CONFIG_PACKAGE_luci-app-vnstat2=y
-
-
-          # ==========================================================
-          # TERMINAL / FILE MANAGER
-          # ==========================================================
-
-          CONFIG_PACKAGE_ttyd=y
-          CONFIG_PACKAGE_luci-app-ttyd=y
-          CONFIG_PACKAGE_luci-app-filemanager=y
-
-
-          # ==========================================================
-          # NETWORK MONITORING
-          # ==========================================================
-
-          CONFIG_PACKAGE_nlbwmon=y
-          CONFIG_PACKAGE_luci-app-nlbwmon=y
-
-          CONFIG_PACKAGE_watchcat=y
-          CONFIG_PACKAGE_luci-app-watchcat=y
-
-
-          # ==========================================================
-          # SQM
-          # ==========================================================
-
-          CONFIG_PACKAGE_sqm-scripts=y
-          CONFIG_PACKAGE_luci-app-sqm=y
-
-
-          # ==========================================================
-          # ADGUARD HOME
-          # ==========================================================
-
-          CONFIG_PACKAGE_adguardhome=y
-          CONFIG_PACKAGE_luci-app-adguardhome=y
-
-
-          # ==========================================================
-          # DOCKER
-          # ==========================================================
-
-          CONFIG_PACKAGE_docker=y
-          CONFIG_PACKAGE_dockerd=y
-          CONFIG_PACKAGE_luci-app-dockerman=y
-
-          CONFIG_KERNEL_CGROUPS=y
-
-          CONFIG_PACKAGE_kmod-veth=y
-          CONFIG_PACKAGE_kmod-fs-btrfs=y
-          CONFIG_PACKAGE_kmod-ipt-extra=y
-
-
-          # ==========================================================
-          # FULL CONE NAT
-          # ==========================================================
-
-          CONFIG_PACKAGE_iptables-mod-fullconenat=y
-          CONFIG_PACKAGE_kmod-ipt-fullconenat=y
-          CONFIG_PACKAGE_kmod-nft-fullconenat=y
-
-
-          # ==========================================================
-          # PERFORMANCE
-          # ==========================================================
-
-          CONFIG_KERNEL_TCP_CONG_BBR=y
-
-          CONFIG_PACKAGE_irqbalance=y
-          CONFIG_PACKAGE_luci-app-irqbalance=y
-
-
-          # ==========================================================
-          # OPENSSL
-          # ==========================================================
-
-          CONFIG_PACKAGE_libopenssl-armv8=y
-
-
-          # ==========================================================
-          # ADDITIONAL PACKAGES TO BUILD AS APKs
-          #
-          # =m means:
-          #   Build the package, but DON'T put it in the firmware.
-          #
-          # These can be installed later with apk.
-          # ==========================================================
-
-          # ----------------------------------------------------------
-          # Networking
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_curl=m
-          CONFIG_PACKAGE_wget-ssl=m
-          CONFIG_PACKAGE_tcpdump=m
-          CONFIG_PACKAGE_iperf3=m
-          CONFIG_PACKAGE_ethtool=m
-          CONFIG_PACKAGE_ip-full=m
-          CONFIG_PACKAGE_nmap=m
-          CONFIG_PACKAGE_socat=m
-          CONFIG_PACKAGE_netcat=m
-          CONFIG_PACKAGE_bind-dig=m
-
-
-          # ----------------------------------------------------------
-          # DNS
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_bind-client=m
-          CONFIG_PACKAGE_dnsmasq-full=m
-
-
-          # ----------------------------------------------------------
-          # VPN / WireGuard
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_wireguard-tools=m
-          CONFIG_PACKAGE_kmod-wireguard=m
-          CONFIG_PACKAGE_luci-proto-wireguard=m
-
-
-          # ----------------------------------------------------------
-          # Storage
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_lsblk=m
-          CONFIG_PACKAGE_block-mount=m
-          CONFIG_PACKAGE_e2fsprogs=m
-          CONFIG_PACKAGE_f2fs-tools=m
-          CONFIG_PACKAGE_btrfs-progs=m
-
-
-          # ----------------------------------------------------------
-          # USB
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_usbutils=m
-          CONFIG_PACKAGE_kmod-usb-storage=m
-          CONFIG_PACKAGE_kmod-usb-storage-uas=m
-          CONFIG_PACKAGE_kmod-usb2=m
-          CONFIG_PACKAGE_kmod-usb3=m
-
-
-          # ----------------------------------------------------------
-          # Filesystems
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_kmod-fs-ext4=m
-          CONFIG_PACKAGE_kmod-fs-vfat=m
-          CONFIG_PACKAGE_kmod-fs-exfat=m
-          CONFIG_PACKAGE_kmod-fs-ntfs3=m
-
-
-          # ----------------------------------------------------------
-          # Debugging / system utilities
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_htop=m
-          CONFIG_PACKAGE_iotop=m
-          CONFIG_PACKAGE_strace=m
-          CONFIG_PACKAGE_lsof=m
-          CONFIG_PACKAGE_procps-ng=m
-          CONFIG_PACKAGE_util-linux=m
-          CONFIG_PACKAGE_coreutils=m
-
-
-          # ----------------------------------------------------------
-          # Monitoring
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_collectd=m
-          CONFIG_PACKAGE_prometheus-node-exporter-lua=m
-
-
-          # ----------------------------------------------------------
-          # QoS / traffic control
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_tc-full=m
-          CONFIG_PACKAGE_kmod-sched-cake=m
-
-
-          # ----------------------------------------------------------
-          # Kernel networking modules
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE_kmod-tun=m
-          CONFIG_PACKAGE_kmod-nf-nathelper=m
-          CONFIG_PACKAGE_kmod-nf-nathelper-extra=m
-          CONFIG_PACKAGE_kmod-ipt-conntrack=m
-          CONFIG_PACKAGE_kmod-ipt-nat=m
-          CONFIG_PACKAGE_kmod-nf-conntrack=m
-          CONFIG_PACKAGE_kmod-nf-conntrack6=m
-
-
-          # ----------------------------------------------------------
-          # Misc useful tools
-          # ----------------------------------------------------------
-
-          CONFIG_PACKAGE-jq=m
-          CONFIG_PACKAGE-bash=m
-          CONFIG_PACKAGE-python3=m
-
-          EOF
-
-
-          # Fix typo-safe package line if present
-          sed -i 's/^CONFIG_PACKAGE-jq=/CONFIG_PACKAGE_jq=/' .config
-          sed -i 's/^CONFIG_PACKAGE-bash=/CONFIG_PACKAGE_bash=/' .config
-          sed -i 's/^CONFIG_PACKAGE-python3=/CONFIG_PACKAGE_python3=/' .config
-
-
-          # Resolve dependencies
           make defconfig
 
-
-          echo
-          echo "================================================"
-          echo "Selected packages"
-          echo "================================================"
-
-          grep '^CONFIG_PACKAGE_' .config | sort
-
-
-      # ============================================================
-      # 7. Download source packages
-      # ============================================================
-      - name: Download sources
+      - name: Hardcode Local APK Feeds Out-of-the-box
         run: |
-          make download -j$(nproc) V=s
+          mkdir -p files/etc/apk/repositories.d
+          echo "https://openwrt.org" > files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
 
+          mkdir -p files/etc/apk
+          echo "aarch64_armv8.2-a" > files/etc/apk/arch
+          echo "aarch64_generic" >> files/etc/apk/arch
 
-      # ============================================================
-      # 8. Build OpenWrt
-      # ============================================================
-      - name: Build OpenWrt
+      - name: Download source files
+        run: make download -j8
+
+      - name: Compile Master Image
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Package all built ipk/apk packages for later manual install
         run: |
-          make -j$(nproc) \
-            world \
-            V=s
+          PKG_DIR=$(find bin/targets -type d -name packages | head -n1)
+          if [ -z "$PKG_DIR" ]; then
+            echo "No packages directory found under bin/targets, skipping zip step"
+            exit 0
+          fi
+          mkdir -p package-bundle
+          cp -r "$PKG_DIR" package-bundle/packages
+          # also grab the base/kernel/luci/routing/etc sub-feeds if they weren't nested under packages/
+          find bin -maxdepth 4 -type d -iname 'packages' -exec cp -rn {} package-bundle/ \; 2>/dev/null || true
+          cd package-bundle && zip -r ../all-packages.zip . && cd ..
 
-
-      # ============================================================
-      # 9. Show firmware
-      # ============================================================
-      - name: Show firmware output
-        run: |
-          echo "================================================"
-          echo "Firmware"
-          echo "================================================"
-
-          find bin/targets/sunxi/armv82 \
-            -maxdepth 2 \
-            -type f \
-            -printf '%p %k KB\n' \
-            | sort
-
-
-      # ============================================================
-      # 10. Count generated APKs
-      # ============================================================
-      - name: Inspect APK packages
-        run: |
-          echo "================================================"
-          echo "Generated APK packages"
-          echo "================================================"
-
-          find bin \
-            -type f \
-            -name '*.apk' \
-            | sort > apk-list.txt
-
-          echo
-          echo "APK count:"
-          wc -l apk-list.txt
-
-          echo
-          echo "APK disk usage:"
-          find bin \
-            -type f \
-            -name '*.apk' \
-            -print0 \
-            | du -ch --files0-from=- \
-            | tail -1 || true
-
-          echo
-          echo "First 100 packages:"
-          head -100 apk-list.txt
-
-
-      # ============================================================
-      # 11. Create APK repository archive
-      # ============================================================
-      - name: Create APK repository archive
-        run: |
-
-          mkdir -p release
-
-          tar \
-            -czf release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz \
-            bin/packages
-
-          echo "APK repository archive:"
-          ls -lh \
-            release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz
-
-
-      # ============================================================
-      # 12. Save build information
-      # ============================================================
-      - name: Save build information
-        run: |
-
-          cp .config \
-            release/config.buildinfo
-
-          git rev-parse HEAD \
-            > release/openwrt-commit.txt
-
-          git branch --show-current \
-            > release/openwrt-branch.txt
-
-          git log -1 --oneline \
-            > release/openwrt-revision.txt
-
-          cp apk-list.txt \
-            release/apk-list.txt
-
-
-      # ============================================================
-      # 13. Upload firmware
-      # ============================================================
-      - name: Upload Cubie A5E firmware
+      - name: Upload Ultimate Flashable Image File
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt_Firmware
-          path: |
-            bin/targets/sunxi/armv82/*
-          if-no-files-found: error
-          retention-days: 30
+          name: Ultimate_Radxa_A5E_OpenWRT
+          path: bin/targets/sunxi/armv82/*
 
-
-      # ============================================================
-      # 14. Upload APK repository
-      # ============================================================
-      - name: Upload APK repository
+      - name: Upload All Core & Kernel Packages (zipped)
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt_APK_Repository
-          path: |
-            release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz
-          if-no-files-found: error
-          retention-days: 30
-
-
-      # ============================================================
-      # 15. Upload build configuration
-      # ============================================================
-      - name: Upload build configuration
-        uses: actions/upload-artifact@v4
-        with:
-          name: Radxa_Cubie_A5E_OpenWrt_Build_Info
-          path: |
-            release/config.buildinfo
-            release/openwrt-commit.txt
-            release/openwrt-branch.txt
-            release/openwrt-revision.txt
-            release/apk-list.txt
-          if-no-files-found: warn
-          retention-days: 30
+          name: Ultimate_Radxa_A5E_OpenWRT_AllPackages
+          path: all-packages.zip
+          
