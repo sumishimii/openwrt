@@ -111,7 +111,16 @@ jobs:
         run: make download -j8
 
       - name: Compile Master Image
-        run: make -j$(nproc) || make -j1 V=s
+        run: |
+          # U-Boot's vendored scripts/dtc detects libyaml via pkg-config, but
+          # OpenWrt's cross-build environment points pkg-config at the target
+          # staging sysroot instead of the host, so the check silently fails
+          # to find yaml-0.1.pc even with libyaml-dev installed. yamltree.c
+          # then compiles (header found) but never links -lyaml, causing
+          # "undefined reference to yaml_*" for every board in uboot-sunxi.
+          # NO_YAML=1 tells dtc to skip YAML tree support entirely.
+          export NO_YAML=1
+          make -j$(nproc) || make -j1 V=s
 
       - name: Show real build failure logs
         if: failure()
