@@ -10,24 +10,21 @@ jobs:
     steps:
 
       # ============================================================
-      # 1. Free GitHub Actions runner disk space
+      # 1. Free GitHub runner disk space
       # ============================================================
       - name: Free up GitHub runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
-
           sudo apt-get clean
-
-          echo "Disk space after cleanup:"
           df -h
 
 
       # ============================================================
-      # 2. Install OpenWrt build dependencies
+      # 2. Install dependencies
       # ============================================================
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
 
@@ -59,11 +56,9 @@ jobs:
             libelf-dev \
             libdw-dev
 
-          echo "Build dependencies installed."
-
 
       # ============================================================
-      # 3. Checkout Wigyori's A527 support branch
+      # 3. Checkout A527 / Cubie A5E branch
       # ============================================================
       - name: Checkout sunxi A527 support branch
         uses: actions/checkout@v4
@@ -74,33 +69,28 @@ jobs:
 
 
       # ============================================================
-      # 4. Display source revision
+      # 4. Show revision
       # ============================================================
-      - name: Show OpenWrt revision
+      - name: Show source revision
         run: |
           echo "Branch:"
           git branch --show-current
 
-          echo
           echo "Commit:"
           git rev-parse HEAD
 
-          echo
-          echo "Remote:"
-          git remote -v
-
 
       # ============================================================
-      # 5. Update and install feeds
+      # 5. Update feeds
       # ============================================================
-      - name: Update feeds
+      - name: Update and install feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
 
       # ============================================================
-      # 6. Configure Cubie A5E
+      # 6. Configure OpenWrt
       # ============================================================
       - name: Configure Radxa Cubie A5E
         run: |
@@ -117,27 +107,11 @@ jobs:
 
 
           # ==========================================================
-          # IMAGE STORAGE
+          # IMAGE SIZE
           # ==========================================================
 
           CONFIG_TARGET_KERNEL_PARTSIZE=64
           CONFIG_TARGET_ROOTFS_PARTSIZE=1024
-
-
-          # ==========================================================
-          # BUILD ALL USERSpace PACKAGES
-          # ==========================================================
-
-          CONFIG_ALL=y
-
-          # Explicitly enable all target-specific packages
-          CONFIG_ALL_NONSHARED=y
-
-          # Explicitly enable all buildable kernel modules
-          CONFIG_ALL_KMODS=y
-
-          # Enable build-system development options
-          CONFIG_DEVEL=y
 
 
           # ==========================================================
@@ -176,7 +150,7 @@ jobs:
 
 
           # ==========================================================
-          # SQM / BUFFERBLOAT
+          # SQM
           # ==========================================================
 
           CONFIG_PACKAGE_sqm-scripts=y
@@ -216,7 +190,7 @@ jobs:
 
 
           # ==========================================================
-          # NETWORK / PERFORMANCE
+          # PERFORMANCE
           # ==========================================================
 
           CONFIG_KERNEL_TCP_CONG_BBR=y
@@ -231,97 +205,191 @@ jobs:
 
           CONFIG_PACKAGE_libopenssl-armv8=y
 
+
+          # ==========================================================
+          # ADDITIONAL PACKAGES TO BUILD AS APKs
+          #
+          # =m means:
+          #   Build the package, but DON'T put it in the firmware.
+          #
+          # These can be installed later with apk.
+          # ==========================================================
+
+          # ----------------------------------------------------------
+          # Networking
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_curl=m
+          CONFIG_PACKAGE_wget-ssl=m
+          CONFIG_PACKAGE_tcpdump=m
+          CONFIG_PACKAGE_iperf3=m
+          CONFIG_PACKAGE_ethtool=m
+          CONFIG_PACKAGE_ip-full=m
+          CONFIG_PACKAGE_nmap=m
+          CONFIG_PACKAGE_socat=m
+          CONFIG_PACKAGE_netcat=m
+          CONFIG_PACKAGE_bind-dig=m
+
+
+          # ----------------------------------------------------------
+          # DNS
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_bind-client=m
+          CONFIG_PACKAGE_dnsmasq-full=m
+
+
+          # ----------------------------------------------------------
+          # VPN / WireGuard
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_wireguard-tools=m
+          CONFIG_PACKAGE_kmod-wireguard=m
+          CONFIG_PACKAGE_luci-proto-wireguard=m
+
+
+          # ----------------------------------------------------------
+          # Storage
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_lsblk=m
+          CONFIG_PACKAGE_block-mount=m
+          CONFIG_PACKAGE_e2fsprogs=m
+          CONFIG_PACKAGE_f2fs-tools=m
+          CONFIG_PACKAGE_btrfs-progs=m
+
+
+          # ----------------------------------------------------------
+          # USB
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_usbutils=m
+          CONFIG_PACKAGE_kmod-usb-storage=m
+          CONFIG_PACKAGE_kmod-usb-storage-uas=m
+          CONFIG_PACKAGE_kmod-usb2=m
+          CONFIG_PACKAGE_kmod-usb3=m
+
+
+          # ----------------------------------------------------------
+          # Filesystems
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_kmod-fs-ext4=m
+          CONFIG_PACKAGE_kmod-fs-vfat=m
+          CONFIG_PACKAGE_kmod-fs-exfat=m
+          CONFIG_PACKAGE_kmod-fs-ntfs3=m
+
+
+          # ----------------------------------------------------------
+          # Debugging / system utilities
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_htop=m
+          CONFIG_PACKAGE_iotop=m
+          CONFIG_PACKAGE_strace=m
+          CONFIG_PACKAGE_lsof=m
+          CONFIG_PACKAGE_procps-ng=m
+          CONFIG_PACKAGE_util-linux=m
+          CONFIG_PACKAGE_coreutils=m
+
+
+          # ----------------------------------------------------------
+          # Monitoring
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_collectd=m
+          CONFIG_PACKAGE_prometheus-node-exporter-lua=m
+
+
+          # ----------------------------------------------------------
+          # QoS / traffic control
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_tc-full=m
+          CONFIG_PACKAGE_kmod-sched-cake=m
+
+
+          # ----------------------------------------------------------
+          # Kernel networking modules
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE_kmod-tun=m
+          CONFIG_PACKAGE_kmod-nf-nathelper=m
+          CONFIG_PACKAGE_kmod-nf-nathelper-extra=m
+          CONFIG_PACKAGE_kmod-ipt-conntrack=m
+          CONFIG_PACKAGE_kmod-ipt-nat=m
+          CONFIG_PACKAGE_kmod-nf-conntrack=m
+          CONFIG_PACKAGE_kmod-nf-conntrack6=m
+
+
+          # ----------------------------------------------------------
+          # Misc useful tools
+          # ----------------------------------------------------------
+
+          CONFIG_PACKAGE-jq=m
+          CONFIG_PACKAGE-bash=m
+          CONFIG_PACKAGE-python3=m
+
           EOF
 
 
-          echo "================================================"
-          echo "Initial .config"
-          echo "================================================"
+          # Fix typo-safe package line if present
+          sed -i 's/^CONFIG_PACKAGE-jq=/CONFIG_PACKAGE_jq=/' .config
+          sed -i 's/^CONFIG_PACKAGE-bash=/CONFIG_PACKAGE_bash=/' .config
+          sed -i 's/^CONFIG_PACKAGE-python3=/CONFIG_PACKAGE_python3=/' .config
 
-          cat .config
 
-
-          # Resolve dependencies and remove obsolete options.
+          # Resolve dependencies
           make defconfig
 
 
           echo
           echo "================================================"
-          echo "Final .config target"
+          echo "Selected packages"
           echo "================================================"
 
-          grep -E \
-            'CONFIG_TARGET_|CONFIG_ALL|CONFIG_DEVEL' \
-            .config || true
+          grep '^CONFIG_PACKAGE_' .config | sort
 
 
       # ============================================================
-      # 7. Download all source archives
+      # 7. Download source packages
       # ============================================================
-      - name: Download all sources
+      - name: Download sources
         run: |
           make download -j$(nproc) V=s
 
 
       # ============================================================
       # 8. Build OpenWrt
-      #
-      # world builds:
-      #   toolchain
-      #   kernel
-      #   all selected packages
-      #   firmware
-      #
-      # IGNORE_ERRORS=m allows packages which cannot be built for
-      # this particular target to fail without killing the entire
-      # build.
       # ============================================================
       - name: Build OpenWrt
         run: |
           make -j$(nproc) \
             world \
-            V=s \
-            IGNORE_ERRORS=m
+            V=s
 
 
       # ============================================================
-      # 9. If parallel build fails, retry serially
-      # ============================================================
-      - name: Retry failed build serially
-        if: failure()
-        run: |
-          echo "Parallel build failed."
-          echo "Retrying with a single job..."
-
-          make -j1 \
-            world \
-            V=s \
-            IGNORE_ERRORS=m
-
-
-      # ============================================================
-      # 10. Display firmware output
+      # 9. Show firmware
       # ============================================================
       - name: Show firmware output
         run: |
-          echo
           echo "================================================"
-          echo "Firmware output"
+          echo "Firmware"
           echo "================================================"
 
           find bin/targets/sunxi/armv82 \
             -maxdepth 2 \
             -type f \
             -printf '%p %k KB\n' \
-            | sort || true
+            | sort
 
 
       # ============================================================
-      # 11. Display all generated APK packages
+      # 10. Count generated APKs
       # ============================================================
-      - name: Show APK packages
+      - name: Inspect APK packages
         run: |
-          echo
           echo "================================================"
           echo "Generated APK packages"
           echo "================================================"
@@ -329,78 +397,45 @@ jobs:
           find bin \
             -type f \
             -name '*.apk' \
-            | sort > /tmp/apk-list.txt
-
-          echo "APK package count:"
-          wc -l /tmp/apk-list.txt
+            | sort > apk-list.txt
 
           echo
-          echo "First packages:"
-          head -50 /tmp/apk-list.txt
+          echo "APK count:"
+          wc -l apk-list.txt
 
           echo
-          echo "Total APK size:"
-          du -ch $(cat /tmp/apk-list.txt) 2>/dev/null \
+          echo "APK disk usage:"
+          find bin \
+            -type f \
+            -name '*.apk' \
+            -print0 \
+            | du -ch --files0-from=- \
             | tail -1 || true
 
-
-      # ============================================================
-      # 12. Verify APK repositories
-      # ============================================================
-      - name: Inspect APK repositories
-        run: |
           echo
-          echo "================================================"
-          echo "bin/packages"
-          echo "================================================"
-
-          find bin/packages \
-            -maxdepth 4 \
-            -type f \
-            | sort || true
-
-          echo
-          echo "================================================"
-          echo "Target packages"
-          echo "================================================"
-
-          find bin/targets/sunxi/armv82 \
-            -type f \
-            \( -name '*.apk' -o -name '*.adb' \) \
-            | sort || true
+          echo "First 100 packages:"
+          head -100 apk-list.txt
 
 
       # ============================================================
-      # 13. Create package repository archive
-      #
-      # IMPORTANT:
-      #
-      # We preserve bin/packages and target packages rather than
-      # flattening everything into one directory.
-      #
-      # This keeps APK repository metadata and architecture/feed
-      # structure intact.
+      # 11. Create APK repository archive
       # ============================================================
-      - name: Create complete APK package archive
+      - name: Create APK repository archive
         run: |
 
           mkdir -p release
 
-          echo "Creating APK repository archive..."
-
           tar \
-            -czf release/Radxa_Cubie_A5E_OpenWrt_All_APK_Packages.tar.gz \
-            bin/packages \
-            bin/targets/sunxi/armv82/packages
+            -czf release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz \
+            bin/packages
 
-          echo
-          echo "Package archive:"
+          echo "APK repository archive:"
           ls -lh \
-            release/Radxa_Cubie_A5E_OpenWrt_All_APK_Packages.tar.gz
+            release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz
 
 
       # ============================================================
-      # 14. Save build configuration
+      # 12. Save build information
       # ============================================================
       - name: Save build information
         run: |
@@ -417,39 +452,14 @@ jobs:
           git log -1 --oneline \
             > release/openwrt-revision.txt
 
-
-      # ============================================================
-      # 15. Create package inventory
-      # ============================================================
-      - name: Create package inventory
-        run: |
-
-          find bin \
-            -type f \
-            -name '*.apk' \
-            | sort \
-            > release/all-apk-packages.txt
-
-          echo "Total APK packages:"
-          wc -l release/all-apk-packages.txt
+          cp apk-list.txt \
+            release/apk-list.txt
 
 
       # ============================================================
-      # 16. Create final firmware archive
+      # 13. Upload firmware
       # ============================================================
-      - name: Create firmware archive
-        run: |
-
-          tar \
-            -czf release/Radxa_Cubie_A5E_OpenWrt_Firmware.tar.gz \
-            -C bin/targets/sunxi/armv82 \
-            .
-
-
-      # ============================================================
-      # 17. Upload firmware
-      # ============================================================
-      - name: Upload firmware
+      - name: Upload Cubie A5E firmware
         uses: actions/upload-artifact@v4
         with:
           name: Radxa_Cubie_A5E_OpenWrt_Firmware
@@ -460,30 +470,30 @@ jobs:
 
 
       # ============================================================
-      # 18. Upload ALL APK packages
+      # 14. Upload APK repository
       # ============================================================
-      - name: Upload all APK packages
+      - name: Upload APK repository
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt_All_APK_Packages
+          name: Radxa_Cubie_A5E_OpenWrt_APK_Repository
           path: |
-            release/Radxa_Cubie_A5E_OpenWrt_All_APK_Packages.tar.gz
+            release/Radxa_Cubie_A5E_OpenWrt_APK_Repository.tar.gz
           if-no-files-found: error
           retention-days: 30
 
 
       # ============================================================
-      # 19. Upload build configuration
+      # 15. Upload build configuration
       # ============================================================
       - name: Upload build configuration
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt_Build_Config
+          name: Radxa_Cubie_A5E_OpenWrt_Build_Info
           path: |
             release/config.buildinfo
             release/openwrt-commit.txt
             release/openwrt-branch.txt
             release/openwrt-revision.txt
-            release/all-apk-packages.txt
+            release/apk-list.txt
           if-no-files-found: warn
           retention-days: 30
