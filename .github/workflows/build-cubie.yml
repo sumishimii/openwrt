@@ -8,25 +8,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ============================================================
-      # 1. Free runner disk space
-      # ============================================================
-      - name: Free up GitHub runner disk space
+
+      - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo apt-get clean
-
           df -h
 
-      # ============================================================
-      # 2. Install build dependencies
-      # ============================================================
       - name: Install dependencies
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
             build-essential \
             clang \
@@ -57,256 +50,203 @@ jobs:
             device-tree-compiler \
             fakeroot
 
-      # ============================================================
-      # 3. Checkout A527 development branch
-      # ============================================================
-      - name: Checkout Developer PR Branch Directly
+      - name: Checkout A527 OpenWrt
         uses: actions/checkout@v4
         with:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
           fetch-depth: 1
 
-      # ============================================================
-      # 4. Update and install feeds
-      # ============================================================
-      - name: Update and Install Feeds
+      - name: Update feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
       # ============================================================
-      # 5. Configure Cubie A5E
+      # CONFIGURATION
       # ============================================================
-      - name: Configure Cubie A5E
-        run: |
-          cat > .config <<'EOF'
-          # ==========================================================
-          # TARGET
-          # ==========================================================
 
+      - name: Create Cubie A5E configuration
+        run: |
+          set -e
+
+          cat > .config <<'EOF'
           CONFIG_TARGET_sunxi=y
           CONFIG_TARGET_sunxi_armv82=y
           CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y
 
-          # ==========================================================
-          # IMAGE / STORAGE
-          # ==========================================================
-
           CONFIG_TARGET_KERNEL_PARTSIZE=64
           CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 
-          # ==========================================================
-          # LINUX KERNEL
-          # ==========================================================
-
-          CONFIG_KERNEL_TCP_CONG_BBR=y
-
-          # ==========================================================
-          # LUCI
-          # ==========================================================
-
           CONFIG_PACKAGE_luci=y
-          CONFIG_PACKAGE_luci-mod-network=y
-          CONFIG_PACKAGE_luci-proto-ipv6=y
-          CONFIG_PACKAGE_luci-proto-vlan=y
-
-          # ==========================================================
-          # NETWORK MONITORING
-          # ==========================================================
 
           CONFIG_PACKAGE_vnstat2=y
           CONFIG_PACKAGE_luci-app-vnstat2=y
-
-          CONFIG_PACKAGE_nlbwmon=y
-          CONFIG_PACKAGE_luci-app-nlbwmon=y
-
-          # ==========================================================
-          # TERMINAL / FILE MANAGEMENT
-          # ==========================================================
 
           CONFIG_PACKAGE_ttyd=y
           CONFIG_PACKAGE_luci-app-ttyd=y
           CONFIG_PACKAGE_luci-app-filemanager=y
 
-          # ==========================================================
-          # WATCHDOG
-          # ==========================================================
+          CONFIG_PACKAGE_nlbwmon=y
+          CONFIG_PACKAGE_luci-app-nlbwmon=y
 
           CONFIG_PACKAGE_watchcat=y
           CONFIG_PACKAGE_luci-app-watchcat=y
 
-          # ==========================================================
-          # SQM / BUFFERBLOAT
-          # ==========================================================
-
           CONFIG_PACKAGE_sqm-scripts=y
           CONFIG_PACKAGE_luci-app-sqm=y
 
-          # ==========================================================
-          # ADGUARD HOME
-          # ==========================================================
-
           CONFIG_PACKAGE_adguardhome=y
           CONFIG_PACKAGE_luci-app-adguardhome=y
-
-          # ==========================================================
-          # DOCKER
-          # ==========================================================
 
           CONFIG_PACKAGE_docker=y
           CONFIG_PACKAGE_dockerd=y
           CONFIG_PACKAGE_luci-app-dockerman=y
 
           CONFIG_KERNEL_CGROUPS=y
-          CONFIG_KERNEL_CGROUP_CPUACCT=y
-          CONFIG_KERNEL_CGROUP_DEVICE=y
-          CONFIG_KERNEL_CGROUP_FREEZER=y
-          CONFIG_KERNEL_CGROUP_NET_PRIO=y
-          CONFIG_KERNEL_CGROUP_PERF=y
-
           CONFIG_PACKAGE_kmod-veth=y
           CONFIG_PACKAGE_kmod-fs-btrfs=y
           CONFIG_PACKAGE_kmod-ipt-extra=y
-
-          # ==========================================================
-          # FULL CONE NAT
-          # ==========================================================
 
           CONFIG_PACKAGE_iptables-mod-fullconenat=y
           CONFIG_PACKAGE_kmod-ipt-fullconenat=y
           CONFIG_PACKAGE_kmod-nft-fullconenat=y
 
-          # ==========================================================
-          # CPU / NETWORK OPTIMIZATION
-          # ==========================================================
+          CONFIG_KERNEL_TCP_CONG_BBR=y
 
           CONFIG_PACKAGE_irqbalance=y
           CONFIG_PACKAGE_luci-app-irqbalance=y
 
-          # ==========================================================
-          # 464XLAT / NAT46
-          # ==========================================================
-
           CONFIG_PACKAGE_464xlat=y
           CONFIG_PACKAGE_kmod-nat46=y
-
-          # ==========================================================
-          # VLAN / 802.1Q
-          # ==========================================================
+          CONFIG_PACKAGE_luci-proto-ipv6=y
 
           CONFIG_PACKAGE_kmod-8021q=y
-
+          CONFIG_PACKAGE_luci-mod-network=y
+          CONFIG_PACKAGE_luci-proto-vlan=y
           EOF
 
-          # ==========================================================
-          # IMPORTANT:
-          # We already have the Cubie A5E U-Boot.
-          # Do NOT build OpenWrt's U-Boot package.
-          # ==========================================================
-
-          make defconfig
-
-          ./scripts/config -d PACKAGE_u-boot
-          ./scripts/config -d PACKAGE_uboot-sunxi
-
-          make defconfig
-
       # ============================================================
-      # 6. Verify target and U-Boot configuration
+      # CONFIGURE
       # ============================================================
-      - name: Verify build configuration
+
+      - name: Run OpenWrt defconfig
         run: |
-          echo "=========================================="
-          echo "TARGET CONFIGURATION"
-          echo "=========================================="
+          set -e
 
-          grep -E \
-            '^CONFIG_TARGET_(sunxi|sunxi_armv82|sunxi_armv82_DEVICE_radxa_cubie-a5e)' \
-            .config || true
+          echo "Running make defconfig..."
 
-          echo
-          echo "=========================================="
-          echo "UBOOT CONFIGURATION"
-          echo "=========================================="
-
-          grep -Ei '(^CONFIG.*UBOOT|A10|OLINUXINO)' .config || true
-
-          echo
-          echo "=========================================="
-          echo "Checking that U-Boot package is disabled"
-          echo "=========================================="
-
-          if grep -Eq '^CONFIG_PACKAGE_(u-boot|uboot-sunxi)=y' .config; then
-            echo "ERROR: OpenWrt U-Boot package is still enabled."
+          if ! make defconfig; then
+            echo ""
+            echo "=============================================="
+            echo "CONFIGURATION FAILED"
+            echo "=============================================="
+            echo ""
+            echo "OpenWrt configuration failed."
+            echo "BUILD WILL NOT CONTINUE."
+            echo ""
             exit 1
           fi
 
-          echo "OK: OpenWrt U-Boot package is disabled."
+          echo ""
+          echo "=============================================="
+          echo "DEFCONFIG SUCCESSFUL"
+          echo "=============================================="
 
       # ============================================================
-      # 7. Show final selected packages
+      # VALIDATE CONFIGURATION
       # ============================================================
-      - name: Show selected packages
+
+      - name: Validate Cubie A5E configuration
         run: |
-          echo "=========================================="
-          echo "SELECTED PACKAGES"
-          echo "=========================================="
+          set -e
 
-          grep '^CONFIG_PACKAGE_.*=y' .config | sort || true
+          echo "Checking target..."
+
+          grep -q '^CONFIG_TARGET_sunxi=y$' .config
+          grep -q '^CONFIG_TARGET_sunxi_armv82=y$'
+          grep -q '^CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y$'
+
+          echo "Target configuration OK."
+
+          echo ""
+          echo "Checking U-Boot..."
+
+          if grep -Eq '^CONFIG_PACKAGE_(u-boot|uboot-sunxi)=y$' .config; then
+            echo ""
+            echo "ERROR: U-Boot package is selected."
+            echo "The build must NOT compile U-Boot."
+            echo ""
+            grep -E '^CONFIG_PACKAGE_(u-boot|uboot-sunxi)=y$' .config
+            exit 1
+          fi
+
+          echo "No OpenWrt U-Boot package selected."
+
+          echo ""
+          echo "Checking rootfs size..."
+
+          grep -q '^CONFIG_TARGET_ROOTFS_PARTSIZE=1024$' .config
+
+          echo "Rootfs size OK."
+
+          echo ""
+          echo "=============================================="
+          echo "CONFIGURATION VALID"
+          echo "BUILD MAY CONTINUE"
+          echo "=============================================="
 
       # ============================================================
-      # 8. Download sources
+      # ONLY AFTER CONFIGURATION PASSES
       # ============================================================
+
       - name: Download source files
         run: |
+          set -e
           make download -j$(nproc)
 
       # ============================================================
-      # 9. Compile
+      # BUILD
       # ============================================================
+
       - name: Compile OpenWrt
         run: |
-          echo "Starting OpenWrt build..."
-          echo "CPU threads: $(nproc)"
-          echo
+          set -e
+
+          echo "Starting OpenWrt compilation..."
 
           make -j$(nproc)
 
       # ============================================================
-      # 10. If parallel build fails, retry with verbose output
+      # VERBOSE RETRY
       # ============================================================
-      - name: Retry failed build verbosely
+
+      - name: Retry failed compilation verbosely
         if: failure()
         run: |
-          echo "Parallel build failed."
-          echo "Retrying with single-threaded verbose output..."
+          echo "Parallel compilation failed."
+          echo "Retrying compilation with verbose output..."
 
           make -j1 V=s
 
       # ============================================================
-      # 11. List generated images
+      # SHOW OUTPUT
       # ============================================================
-      - name: List build artifacts
+
+      - name: List generated files
         if: success()
         run: |
-          echo "=========================================="
-          echo "GENERATED TARGET FILES"
-          echo "=========================================="
+          echo "=============================================="
+          echo "BUILD OUTPUT"
+          echo "=============================================="
 
-          find bin/targets -type f -printf '%p\n' | sort
-
-          echo
-          echo "=========================================="
-          echo "BUILD DIRECTORY SIZE"
-          echo "=========================================="
-
-          du -sh bin/targets/*/* 2>/dev/null || true
+          find bin/targets -type f -print | sort
 
       # ============================================================
-      # 12. Package all built packages
+      # PACKAGE REPOSITORIES
       # ============================================================
-      - name: Package all built packages
+
+      - name: Package OpenWrt packages
         if: success()
         run: |
           set -e
@@ -314,57 +254,43 @@ jobs:
           rm -rf package-bundle
           mkdir -p package-bundle
 
-          echo "Searching for package repositories..."
-
-          find bin/targets -type d -name packages -print
-
           found=0
 
-          while IFS= read -r pkgdir; do
+          while IFS= read -r dir; do
             found=1
 
-            name="$(echo "$pkgdir" | sed 's#/#_#g' | sed 's#^_##')"
+            name="$(echo "$dir" | tr '/' '_')"
 
             mkdir -p "package-bundle/$name"
-
-            cp -a "$pkgdir/." "package-bundle/$name/"
+            cp -a "$dir/." "package-bundle/$name/"
 
           done < <(find bin/targets -type d -name packages)
 
-          if [ "$found" -eq 0 ]; then
-            echo "No package directories found."
-            exit 0
+          if [ "$found" = "1" ]; then
+            cd package-bundle
+            zip -r ../all-packages.zip .
+            cd ..
+          else
+            echo "No package repository found."
           fi
 
-          cd package-bundle
-
-          zip -r ../all-packages.zip .
-
-          cd ..
-
-          ls -lh all-packages.zip
-
       # ============================================================
-      # 13. Upload OpenWrt images
+      # ARTIFACTS
       # ============================================================
-      - name: Upload Cubie A5E OpenWrt Image
+
+      - name: Upload OpenWrt image
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Radxa_Cubie_A5E_OpenWrt
-          path: |
-            bin/targets/sunxi/armv82/**
+          path: bin/targets/**
           if-no-files-found: error
           compression-level: 0
 
-      # ============================================================
-      # 14. Upload packages
-      # ============================================================
-      - name: Upload All OpenWrt Packages
-        if: success()
+      - name: Upload packages
+        if: success() && hashFiles('all-packages.zip') != ''
         uses: actions/upload-artifact@v4
         with:
           name: Radxa_Cubie_A5E_OpenWrt_AllPackages
           path: all-packages.zip
-          if-no-files-found: warn
           compression-level: 0
