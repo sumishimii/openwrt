@@ -10,21 +10,21 @@ jobs:
     steps:
 
       # ============================================================
-      # FREE DISK SPACE
+      # 1. FREE DISK SPACE
       # ============================================================
 
-      - name: Free GitHub runner disk space
+      - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo apt-get clean
 
-          echo "Disk after cleanup:"
+          echo "Available disk space:"
           df -h
 
       # ============================================================
-      # DEPENDENCIES
+      # 2. BUILD DEPENDENCIES
       # ============================================================
 
       - name: Install build dependencies
@@ -62,10 +62,10 @@ jobs:
             fakeroot
 
       # ============================================================
-      # CHECK OUT THE ACTUAL PR BRANCH
+      # 3. CHECK OUT PR #23296 DEVELOPMENT BRANCH
       # ============================================================
 
-      - name: Checkout A527/T527 OpenWrt PR branch
+      - name: Checkout A527 OpenWrt branch
         uses: actions/checkout@v4
         with:
           repository: wigyori/openwrt
@@ -73,27 +73,23 @@ jobs:
           fetch-depth: 1
 
       # ============================================================
-      # SHOW EXACT SOURCE VERSION
+      # 4. SHOW SOURCE REVISION
       # ============================================================
 
       - name: Show source revision
         run: |
-          echo "============================================"
-          echo "OpenWrt source"
-          echo "============================================"
-
+          echo "OpenWrt revision:"
           git log -1 --oneline
-          git status --short
 
           echo
-          echo "Expected PR:"
-          echo "https://github.com/openwrt/openwrt/pull/23296"
+          echo "Branch:"
+          git branch --show-current
 
       # ============================================================
-      # FEEDS
+      # 5. UPDATE FEEDS
       # ============================================================
 
-      - name: Update feeds
+      - name: Update and install feeds
         run: |
           set -e
 
@@ -101,133 +97,131 @@ jobs:
           ./scripts/feeds install -a
 
       # ============================================================
-      # CREATE CONFIG
+      # 6. CREATE CUBIE A5E CONFIGURATION
       #
-      # IMPORTANT:
-      # PR #23296 uses:
+      # PR #23296 target:
       #
       #   sunxi
       #     cortexa55
       #       radxa_cubie-a5e
       #
-      # NOT armv82.
+      # U-BOOT IS NOT TOUCHED HERE.
       # ============================================================
 
       - name: Create Cubie A5E configuration
         run: |
-          set -e
-
           cat > .config <<'EOF'
-          #
-          # Radxa Cubie A5E
-          # Allwinner A527 / Cortex-A55
-          #
+
+          # ==========================================================
+          # TARGET
+          # ==========================================================
 
           CONFIG_TARGET_sunxi=y
           CONFIG_TARGET_sunxi_cortexa55=y
           CONFIG_TARGET_sunxi_cortexa55_DEVICE_radxa_cubie-a5e=y
 
-          #
-          # Image storage
-          #
+          # ==========================================================
+          # IMAGE SIZE
+          # ==========================================================
 
           CONFIG_TARGET_KERNEL_PARTSIZE=64
           CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 
-          #
-          # LuCI
-          #
+          # ==========================================================
+          # LUCI
+          # ==========================================================
 
           CONFIG_PACKAGE_luci=y
 
-          #
-          # vnStat
-          #
+          # ==========================================================
+          # VNSTAT
+          # ==========================================================
 
           CONFIG_PACKAGE_vnstat2=y
           CONFIG_PACKAGE_luci-app-vnstat2=y
 
-          #
-          # Terminal / file manager
-          #
+          # ==========================================================
+          # TERMINAL / FILE MANAGER
+          # ==========================================================
 
           CONFIG_PACKAGE_ttyd=y
           CONFIG_PACKAGE_luci-app-ttyd=y
           CONFIG_PACKAGE_luci-app-filemanager=y
 
-          #
-          # Network bandwidth monitoring
-          #
+          # ==========================================================
+          # BANDWIDTH MONITORING
+          # ==========================================================
 
           CONFIG_PACKAGE_nlbwmon=y
           CONFIG_PACKAGE_luci-app-nlbwmon=y
 
-          #
-          # Watchdog
-          #
+          # ==========================================================
+          # WATCHDOG
+          # ==========================================================
 
           CONFIG_PACKAGE_watchcat=y
           CONFIG_PACKAGE_luci-app-watchcat=y
 
-          #
+          # ==========================================================
           # SQM
-          #
+          # ==========================================================
 
           CONFIG_PACKAGE_sqm-scripts=y
           CONFIG_PACKAGE_luci-app-sqm=y
 
-          #
-          # AdGuard Home
-          #
+          # ==========================================================
+          # ADGUARD HOME
+          # ==========================================================
 
           CONFIG_PACKAGE_adguardhome=y
           CONFIG_PACKAGE_luci-app-adguardhome=y
 
-          #
-          # Docker
-          #
+          # ==========================================================
+          # DOCKER
+          # ==========================================================
 
           CONFIG_PACKAGE_docker=y
           CONFIG_PACKAGE_dockerd=y
           CONFIG_PACKAGE_luci-app-dockerman=y
 
           CONFIG_KERNEL_CGROUPS=y
+
           CONFIG_PACKAGE_kmod-veth=y
           CONFIG_PACKAGE_kmod-fs-btrfs=y
           CONFIG_PACKAGE_kmod-ipt-extra=y
 
-          #
-          # Full-cone NAT
-          #
+          # ==========================================================
+          # FULL CONE NAT
+          # ==========================================================
 
           CONFIG_PACKAGE_iptables-mod-fullconenat=y
           CONFIG_PACKAGE_kmod-ipt-fullconenat=y
           CONFIG_PACKAGE_kmod-nft-fullconenat=y
 
-          #
+          # ==========================================================
           # BBR
-          #
+          # ==========================================================
 
           CONFIG_KERNEL_TCP_CONG_BBR=y
 
-          #
-          # IRQ balancing
-          #
+          # ==========================================================
+          # IRQ BALANCING
+          # ==========================================================
 
           CONFIG_PACKAGE_irqbalance=y
           CONFIG_PACKAGE_luci-app-irqbalance=y
 
-          #
-          # IPv6 / 464XLAT
-          #
+          # ==========================================================
+          # 464XLAT / NAT46
+          # ==========================================================
 
           CONFIG_PACKAGE_464xlat=y
           CONFIG_PACKAGE_kmod-nat46=y
           CONFIG_PACKAGE_luci-proto-ipv6=y
 
-          #
+          # ==========================================================
           # VLAN / 802.1Q
-          #
+          # ==========================================================
 
           CONFIG_PACKAGE_kmod-8021q=y
           CONFIG_PACKAGE_luci-mod-network=y
@@ -236,163 +230,77 @@ jobs:
           EOF
 
       # ============================================================
-      # CONFIGURE
+      # 7. CONFIGURE
       #
-      # IF THIS FAILS, THE JOB STOPS HERE.
-      # NOTHING BELOW THIS STEP RUNS.
+      # If this fails, GitHub Actions stops here.
+      #
+      # NOTHING AFTER THIS STEP WILL RUN.
       # ============================================================
 
       - name: Generate OpenWrt configuration
         run: |
           set -e
 
-          echo "Running make defconfig..."
+          echo "Running OpenWrt defconfig..."
 
           make defconfig
 
           echo
-          echo "Configuration generated successfully."
+          echo "=========================================="
+          echo "CONFIGURATION SUCCESSFUL"
+          echo "=========================================="
 
       # ============================================================
-      # VERIFY THE ACTUAL PR TARGET
-      #
-      # These are the symbols that actually correspond to the
-      # current PR branch.
+      # 8. DOWNLOAD SOURCES
       # ============================================================
 
-      - name: Verify Cubie A5E target
-        run: |
-          set -e
-
-          echo "============================================"
-          echo "TARGET"
-          echo "============================================"
-
-          grep '^CONFIG_TARGET_sunxi=' .config
-          grep '^CONFIG_TARGET_sunxi_cortexa55=' .config
-          grep '^CONFIG_TARGET_sunxi_cortexa55_DEVICE_radxa_cubie-a5e=' .config
-
-          echo
-          echo "Cubie A5E target confirmed."
-
-      # ============================================================
-      # REMOVE ALL U-BOOT PACKAGES
-      #
-      # The PR contains many U-Boot variants.
-      # We do not want ANY of them because the user already has
-      # a working Cubie A5E U-Boot.
-      #
-      # Do this AFTER defconfig because the package defaults are
-      # generated from the selected target/device.
-      #
-      # DO NOT run defconfig again afterwards.
-      # ============================================================
-
-      - name: Disable all OpenWrt U-Boot packages
-        run: |
-          set -e
-
-          echo "U-Boot packages selected before removal:"
-          grep '^CONFIG_PACKAGE_u-boot-' .config || true
-
-          echo
-          echo "Disabling every CONFIG_PACKAGE_u-boot-* option..."
-
-          grep -E '^CONFIG_PACKAGE_u-boot-[^=]+=y$' .config \
-            | cut -d= -f1 \
-            | while read -r symbol; do
-                echo "Disabling $symbol"
-                ./scripts/config -d "$symbol"
-              done
-
-          echo
-          echo "U-Boot packages after removal:"
-          grep '^CONFIG_PACKAGE_u-boot-' .config || true
-
-          echo
-          echo "Checking..."
-
-          if grep -Eq '^CONFIG_PACKAGE_u-boot-[^=]+=y$' .config; then
-            echo "ERROR: A U-Boot package is still enabled."
-            exit 1
-          fi
-
-          echo "OK: No U-Boot package will be built."
-
-      # ============================================================
-      # SAVE FINAL CONFIG FOR DEBUGGING
-      # ============================================================
-
-      - name: Show final important configuration
-        run: |
-          echo "============================================"
-          echo "FINAL TARGET"
-          echo "============================================"
-
-          grep '^CONFIG_TARGET_' .config | head -30
-
-          echo
-          echo "============================================"
-          echo "FINAL U-BOOT CONFIG"
-          echo "============================================"
-
-          grep -E 'CONFIG_PACKAGE_u-boot-|CONFIG_PACKAGE_trusted-firmware' .config || true
-
-          echo
-          echo "============================================"
-          echo "FINAL ROOTFS CONFIG"
-          echo "============================================"
-
-          grep '^CONFIG_TARGET_.*PARTSIZE' .config || true
-
-      # ============================================================
-      # DOWNLOAD
-      #
-      # ONLY reached if configuration succeeded.
-      # ============================================================
-
-      - name: Download sources
+      - name: Download source files
         run: |
           set -e
 
           make download -j$(nproc)
 
       # ============================================================
-      # BUILD
+      # 9. BUILD
       #
-      # ONE BUILD.
+      # ONE BUILD ONLY.
+      #
       # NO RETRY.
-      # NO SECOND BUILD.
+      # NO make -j1 fallback.
+      # NO U-BOOT MODIFICATION.
       # ============================================================
 
       - name: Build OpenWrt
         run: |
           set -e
 
-          echo "============================================"
+          echo "=========================================="
           echo "BUILDING RADXA CUBIE A5E OPENWRT"
-          echo "============================================"
+          echo "=========================================="
+
+          echo "CPU threads: $(nproc)"
+          echo
 
           make -j$(nproc)
 
       # ============================================================
-      # SHOW OUTPUT
+      # 10. SHOW OUTPUT
       # ============================================================
 
-      - name: Show generated images
+      - name: Show generated files
         if: success()
         run: |
-          echo "============================================"
-          echo "BUILD SUCCESS"
-          echo "============================================"
+          echo "=========================================="
+          echo "BUILD SUCCESSFUL"
+          echo "=========================================="
 
-          find bin/targets -type f -printf '%p\n' | sort
+          find bin/targets -type f -print | sort
 
       # ============================================================
-      # PACKAGE REPOSITORIES
+      # 11. PACKAGE ALL PACKAGE FEEDS
       # ============================================================
 
-      - name: Package OpenWrt package repositories
+      - name: Package built packages
         if: success()
         run: |
           set -e
@@ -407,7 +315,8 @@ jobs:
 
             name="$(echo "$pkgdir" | sed 's#/#_#g')"
 
-            echo "Collecting: $pkgdir"
+            echo "Collecting:"
+            echo "$pkgdir"
 
             mkdir -p "package-bundle/$name"
             cp -a "$pkgdir/." "package-bundle/$name/"
@@ -419,13 +328,15 @@ jobs:
             zip -r ../all-packages.zip .
             cd ..
 
+            echo
+            echo "Package archive:"
             ls -lh all-packages.zip
           else
             echo "No package repositories found."
           fi
 
       # ============================================================
-      # UPLOAD FIRMWARE
+      # 12. UPLOAD FIRMWARE
       # ============================================================
 
       - name: Upload Cubie A5E OpenWrt images
@@ -438,7 +349,7 @@ jobs:
           compression-level: 0
 
       # ============================================================
-      # UPLOAD PACKAGES
+      # 13. UPLOAD PACKAGES
       # ============================================================
 
       - name: Upload OpenWrt packages
