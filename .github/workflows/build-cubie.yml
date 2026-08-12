@@ -1,4 +1,4 @@
-name: Build Radxa Cubie A5E OpenWrt
+name: Build Ultimate Radxa Cubie A5E OpenWRT
 
 on:
   workflow_dispatch:
@@ -6,356 +6,155 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-
-      # ============================================================
-      # 1. FREE DISK SPACE
-      # ============================================================
-
-      - name: Free runner disk space
+      - name: Free up GitHub runner disk space
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get clean
 
-          echo "Available disk space:"
-          df -h
-
-      # ============================================================
-      # 2. BUILD DEPENDENCIES
-      # ============================================================
-
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib \
+            g++-multilib gettext git libncurses5-dev libssl-dev python3-setuptools \
+            rsync swig unzip zlib1g-dev file wget quilt cpio libyaml-dev
 
-          sudo apt-get install -y \
-            build-essential \
-            clang \
-            flex \
-            bison \
-            g++ \
-            gawk \
-            gcc-multilib \
-            g++-multilib \
-            gettext \
-            git \
-            libncurses5-dev \
-            libncurses-dev \
-            libssl-dev \
-            libyaml-dev \
-            python3-dev \
-            python3-setuptools \
-            rsync \
-            swig \
-            unzip \
-            zip \
-            zlib1g-dev \
-            file \
-            wget \
-            quilt \
-            cpio \
-            bc \
-            device-tree-compiler \
-            fakeroot
-
-      # ============================================================
-      # 3. CHECK OUT PR #23296 DEVELOPMENT BRANCH
-      # ============================================================
-
-      - name: Checkout A527 OpenWrt branch
+      - name: Checkout Developer PR Branch Directly
         uses: actions/checkout@v4
         with:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
-          fetch-depth: 1
 
-      # ============================================================
-      # 4. SHOW SOURCE REVISION
-      # ============================================================
-
-      - name: Show source revision
+      - name: Update and Install Feeds
         run: |
-          echo "OpenWrt revision:"
-          git log -1 --oneline
-
-          echo
-          echo "Branch:"
-          git branch --show-current
-
-      # ============================================================
-      # 5. UPDATE FEEDS
-      # ============================================================
-
-      - name: Update and install feeds
-        run: |
-          set -e
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      # ============================================================
-      # 6. CREATE CUBIE A5E CONFIGURATION
-      #
-      # PR #23296 target:
-      #
-      #   sunxi
-      #     cortexa55
-      #       radxa_cubie-a5e
-      #
-      # U-BOOT IS NOT TOUCHED HERE.
-      # ============================================================
-
-      - name: Create Cubie A5E configuration
+      - name: Inject Master Configuration Settings
         run: |
-          cat > .config <<'EOF'
+          # 1. Base Machine Target Profiling & Storage Expansion
+          echo "CONFIG_TARGET_sunxi=y" > .config
+          echo "CONFIG_TARGET_sunxi_armv82=y" >> .config
+          echo "CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" >> .config
 
-          # ==========================================================
-          # TARGET
-          # ==========================================================
+          # Force the compiler to increase storage allocation limits for Docker/AdGuard Home
+          echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
+          echo "CONFIG_TARGET_ROOTFS_PARTSIZE=1024" >> .config
 
-          CONFIG_TARGET_sunxi=y
-          CONFIG_TARGET_sunxi_cortexa55=y
-          CONFIG_TARGET_sunxi_cortexa55_DEVICE_radxa_cubie-a5e=y
+          # 2. Base Core Interfaces & Traffic Utilities
+          echo "CONFIG_PACKAGE_luci=y" >> .config
+          echo "CONFIG_PACKAGE_vnstat2=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-vnstat2=y" >> .config
 
-          # ==========================================================
-          # IMAGE SIZE
-          # ==========================================================
+          # 3. Native Terminal, File Manager, Network Monitoring & Watchdog
+          echo "CONFIG_PACKAGE_ttyd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-ttyd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-filemanager=y" >> .config
+          echo "CONFIG_PACKAGE_nlbwmon=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-nlbwmon=y" >> .config
+          echo "CONFIG_PACKAGE_watchcat=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-watchcat=y" >> .config
 
-          CONFIG_TARGET_KERNEL_PARTSIZE=64
-          CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+          # 4. Smart Queue Management (SQM) & Smart Bufferbloat Control
+          echo "CONFIG_PACKAGE_sqm-scripts=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-sqm=y" >> .config
 
-          # ==========================================================
-          # LUCI
-          # ==========================================================
+          # 5. Core Filtering AdGuard Home Integration Stack
+          echo "CONFIG_PACKAGE_adguardhome=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-adguardhome=y" >> .config
 
-          CONFIG_PACKAGE_luci=y
+          # 6. Integrate Complete Docker Container Stack Engine
+          echo "CONFIG_PACKAGE_docker=y" >> .config
+          echo "CONFIG_PACKAGE_dockerd=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-dockerman=y" >> .config
+          echo "CONFIG_KERNEL_CGROUPS=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-veth=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-fs-btrfs=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-extra=y" >> .config
 
-          # ==========================================================
-          # VNSTAT
-          # ==========================================================
+          # 7. Enable High Performance Full Cone NAT (NAT1)
+          echo "CONFIG_PACKAGE_iptables-mod-fullconenat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-fullconenat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nft-fullconenat=y" >> .config
 
-          CONFIG_PACKAGE_vnstat2=y
-          CONFIG_PACKAGE_luci-app-vnstat2=y
+          # 8. High Performance Optimizations (BBR TCP, Core Balancing & Crypto Acceleration)
+          echo "CONFIG_KERNEL_TCP_CONG_BBR=y" >> .config
+          echo "CONFIG_PACKAGE_irqbalance=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-irqbalance=y" >> .config
+          echo "CONFIG_PACKAGE_libopenssl-armv8=y" >> .config
 
-          # ==========================================================
-          # TERMINAL / FILE MANAGER
-          # ==========================================================
+          # 9. 464XLAT (CLAT) support for IPv6-only WAN / NAT64 uplinks
+          echo "CONFIG_PACKAGE_464xlat=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nat46=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-ipv6=y" >> .config
 
-          CONFIG_PACKAGE_ttyd=y
-          CONFIG_PACKAGE_luci-app-ttyd=y
-          CONFIG_PACKAGE_luci-app-filemanager=y
-
-          # ==========================================================
-          # BANDWIDTH MONITORING
-          # ==========================================================
-
-          CONFIG_PACKAGE_nlbwmon=y
-          CONFIG_PACKAGE_luci-app-nlbwmon=y
-
-          # ==========================================================
-          # WATCHDOG
-          # ==========================================================
-
-          CONFIG_PACKAGE_watchcat=y
-          CONFIG_PACKAGE_luci-app-watchcat=y
-
-          # ==========================================================
-          # SQM
-          # ==========================================================
-
-          CONFIG_PACKAGE_sqm-scripts=y
-          CONFIG_PACKAGE_luci-app-sqm=y
-
-          # ==========================================================
-          # ADGUARD HOME
-          # ==========================================================
-
-          CONFIG_PACKAGE_adguardhome=y
-          CONFIG_PACKAGE_luci-app-adguardhome=y
-
-          # ==========================================================
-          # DOCKER
-          # ==========================================================
-
-          CONFIG_PACKAGE_docker=y
-          CONFIG_PACKAGE_dockerd=y
-          CONFIG_PACKAGE_luci-app-dockerman=y
-
-          CONFIG_KERNEL_CGROUPS=y
-
-          CONFIG_PACKAGE_kmod-veth=y
-          CONFIG_PACKAGE_kmod-fs-btrfs=y
-          CONFIG_PACKAGE_kmod-ipt-extra=y
-
-          # ==========================================================
-          # FULL CONE NAT
-          # ==========================================================
-
-          CONFIG_PACKAGE_iptables-mod-fullconenat=y
-          CONFIG_PACKAGE_kmod-ipt-fullconenat=y
-          CONFIG_PACKAGE_kmod-nft-fullconenat=y
-
-          # ==========================================================
-          # BBR
-          # ==========================================================
-
-          CONFIG_KERNEL_TCP_CONG_BBR=y
-
-          # ==========================================================
-          # IRQ BALANCING
-          # ==========================================================
-
-          CONFIG_PACKAGE_irqbalance=y
-          CONFIG_PACKAGE_luci-app-irqbalance=y
-
-          # ==========================================================
-          # 464XLAT / NAT46
-          # ==========================================================
-
-          CONFIG_PACKAGE_464xlat=y
-          CONFIG_PACKAGE_kmod-nat46=y
-          CONFIG_PACKAGE_luci-proto-ipv6=y
-
-          # ==========================================================
-          # VLAN / 802.1Q
-          # ==========================================================
-
-          CONFIG_PACKAGE_kmod-8021q=y
-          CONFIG_PACKAGE_luci-mod-network=y
-          CONFIG_PACKAGE_luci-proto-vlan=y
-
-          EOF
-
-      # ============================================================
-      # 7. CONFIGURE
-      #
-      # If this fails, GitHub Actions stops here.
-      #
-      # NOTHING AFTER THIS STEP WILL RUN.
-      # ============================================================
-
-      - name: Generate OpenWrt configuration
-        run: |
-          set -e
-
-          echo "Running OpenWrt defconfig..."
+          # 10. VLAN support (802.1q tagging + LuCI bridge VLAN filtering, DSA-based)
+          echo "CONFIG_PACKAGE_kmod-8021q=y" >> .config
+          echo "CONFIG_PACKAGE_luci-mod-network=y" >> .config
+          echo "CONFIG_PACKAGE_luci-proto-vlan=y" >> .config
 
           make defconfig
 
-          echo
-          echo "=========================================="
-          echo "CONFIGURATION SUCCESSFUL"
-          echo "=========================================="
+      - name: Hardcode Local APK Feeds Out-of-the-box
+        run: |
+          mkdir -p files/etc/apk/repositories.d
+          echo "https://openwrt.org" > files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
+          echo "https://openwrt.org" >> files/etc/apk/repositories.d/distfeeds.list
 
-      # ============================================================
-      # 8. DOWNLOAD SOURCES
-      # ============================================================
+          mkdir -p files/etc/apk
+          echo "aarch64_armv8.2-a" > files/etc/apk/arch
+          echo "aarch64_generic" >> files/etc/apk/arch
 
       - name: Download source files
+        run: make download -j8
+
+      - name: Compile Master Image
+        run: make -j$(nproc) || make -j1 V=s
+
+      - name: Show real build failure logs
+        if: failure()
         run: |
-          set -e
+          echo "==== Locating per-package failure logs ===="
+          find logs -type f -name "*.txt" 2>/dev/null | while read -r f; do
+            if grep -qiE "error|failed" "$f" 2>/dev/null; then
+              echo "########## $f ##########"
+              tail -n 200 "$f"
+              echo
+            fi
+          done
 
-          make download -j$(nproc)
+      - name: Upload full build logs (always, for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: logs/
+          if-no-files-found: ignore
 
-      # ============================================================
-      # 9. BUILD
-      #
-      # ONE BUILD ONLY.
-      #
-      # NO RETRY.
-      # NO make -j1 fallback.
-      # NO U-BOOT MODIFICATION.
-      # ============================================================
-
-      - name: Build OpenWrt
+      - name: Package all built ipk/apk packages for later manual install
         run: |
-          set -e
-
-          echo "=========================================="
-          echo "BUILDING RADXA CUBIE A5E OPENWRT"
-          echo "=========================================="
-
-          echo "CPU threads: $(nproc)"
-          echo
-
-          make -j$(nproc)
-
-      # ============================================================
-      # 10. SHOW OUTPUT
-      # ============================================================
-
-      - name: Show generated files
-        if: success()
-        run: |
-          echo "=========================================="
-          echo "BUILD SUCCESSFUL"
-          echo "=========================================="
-
-          find bin/targets -type f -print | sort
-
-      # ============================================================
-      # 11. PACKAGE ALL PACKAGE FEEDS
-      # ============================================================
-
-      - name: Package built packages
-        if: success()
-        run: |
-          set -e
-
-          rm -rf package-bundle
-          mkdir -p package-bundle
-
-          found=0
-
-          while IFS= read -r pkgdir; do
-            found=1
-
-            name="$(echo "$pkgdir" | sed 's#/#_#g')"
-
-            echo "Collecting:"
-            echo "$pkgdir"
-
-            mkdir -p "package-bundle/$name"
-            cp -a "$pkgdir/." "package-bundle/$name/"
-
-          done < <(find bin/targets -type d -name packages)
-
-          if [ "$found" = "1" ]; then
-            cd package-bundle
-            zip -r ../all-packages.zip .
-            cd ..
-
-            echo
-            echo "Package archive:"
-            ls -lh all-packages.zip
-          else
-            echo "No package repositories found."
+          PKG_DIR=$(find bin/targets -type d -name packages | head -n1)
+          if [ -z "$PKG_DIR" ]; then
+            echo "No packages directory found under bin/targets, skipping zip step"
+            exit 0
           fi
+          mkdir -p package-bundle
+          cp -r "$PKG_DIR" package-bundle/packages
+          # also grab the base/kernel/luci/routing/etc sub-feeds if they weren't nested under packages/
+          find bin -maxdepth 4 -type d -iname 'packages' -exec cp -rn {} package-bundle/ \; 2>/dev/null || true
+          cd package-bundle && zip -r ../all-packages.zip . && cd ..
 
-      # ============================================================
-      # 12. UPLOAD FIRMWARE
-      # ============================================================
-
-      - name: Upload Cubie A5E OpenWrt images
-        if: success()
+      - name: Upload Ultimate Flashable Image File
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt
-          path: bin/targets/**
-          if-no-files-found: error
-          compression-level: 0
+          name: Ultimate_Radxa_A5E_OpenWRT
+          path: bin/targets/sunxi/armv82/*
 
-      # ============================================================
-      # 13. UPLOAD PACKAGES
-      # ============================================================
-
-      - name: Upload OpenWrt packages
-        if: success() && hashFiles('all-packages.zip') != ''
+      - name: Upload All Core & Kernel Packages (zipped)
         uses: actions/upload-artifact@v4
         with:
-          name: Radxa_Cubie_A5E_OpenWrt_AllPackages
+          name: Ultimate_Radxa_A5E_OpenWRT_AllPackages
           path: all-packages.zip
-          compression-level: 0
+          
