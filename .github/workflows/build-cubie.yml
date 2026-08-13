@@ -112,13 +112,21 @@ jobs:
 
       - name: Compile Master Image
         run: |
-          # U-Boot's vendored scripts/dtc detects libyaml via pkg-config, but
-          # OpenWrt's cross-build environment points pkg-config at the target
-          # staging sysroot instead of the host, so the check silently fails
-          # to find yaml-0.1.pc even with libyaml-dev installed. yamltree.c
-          # then compiles (header found) but never links -lyaml, causing
-          # "undefined reference to yaml_*" for every board in uboot-sunxi.
-          # NO_YAML=1 tells dtc to skip YAML tree support entirely.
+          # OpenWrt builds U-Boot's host dtc with PKG_CONFIG_LIBDIR forced to
+          # staging_dir/host/lib/pkgconfig, so it never sees the system's
+          # yaml-0.1.pc from libyaml-dev even though the library is installed.
+          # NO_YAML=1 doesn't propagate into that sub-make either. The actual
+          # fix is to make libyaml's .pc file visible where pkg-config is
+          # really searching, so dtc's host tool correctly links -lyaml.
+          mkdir -p staging_dir/host/lib/pkgconfig
+          YAML_PC="$(dpkg -L libyaml-dev 2>/dev/null | grep 'pkgconfig/yaml-0\.1\.pc$' | head -n1)"
+          if [ -n "$YAML_PC" ]; then
+            cp "$YAML_PC" staging_dir/host/lib/pkgconfig/
+            echo "Copied $YAML_PC -> staging_dir/host/lib/pkgconfig/"
+          else
+            echo "WARNING: yaml-0.1.pc not found from libyaml-dev; uboot-sunxi dtc build may still fail" >&2
+          fi
+
           export NO_YAML=1
           make -j$(nproc) || make -j1 V=s
 
