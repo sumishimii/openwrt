@@ -45,8 +45,7 @@ jobs:
         run: |
           # 1. Base Machine Target Profiling & Storage Expansion
           echo "CONFIG_TARGET_sunxi=y" > .config
-          echo "CONFIG_TARGET_sunxi_armv82=y" >> .config
-          echo "CONFIG_TARGET_sunxi_armv82_DEVICE_radxa_cubie-a5e=y" >> .config
+          echo "CONFIG_TARGET_sunxi_cortexa55=y" >> .config
 
           # Force the compiler to increase storage allocation limits for Docker/AdGuard Home
           echo "CONFIG_TARGET_KERNEL_PARTSIZE=64" >> .config
@@ -104,6 +103,27 @@ jobs:
           echo "CONFIG_PACKAGE_luci-mod-network=y" >> .config
           echo "CONFIG_PACKAGE_luci-proto-vlan=y" >> .config
 
+          # First defconfig pass: this just resolves the subtarget so we can
+          # discover the REAL device symbol name below instead of guessing it.
+          make defconfig
+
+      - name: Discover and select the real Cubie A5E device symbol
+        run: |
+          echo "==== Device options make defconfig knows about for cortexa55 ===="
+          grep "CONFIG_TARGET_sunxi_cortexa55_DEVICE_" .config || echo "none set yet"
+          echo
+          echo "==== Device stanzas defined in target/linux/sunxi/image/cortexa55.mk ===="
+          grep -n "^define Device/" target/linux/sunxi/image/cortexa55.mk || echo "file/pattern not found"
+
+          DEVICE_SYMBOL=$(grep -oE "^define Device/[A-Za-z0-9_.-]*(cubie|a5e)[A-Za-z0-9_.-]*" target/linux/sunxi/image/cortexa55.mk -i | sed 's#^define Device/##' | head -n1)
+
+          if [ -z "$DEVICE_SYMBOL" ]; then
+            echo "::error::Could not find a cubie/a5e device stanza in target/linux/sunxi/image/cortexa55.mk. See the stanza list above and update the workflow with the correct name."
+            exit 1
+          fi
+
+          echo "Selected device symbol: $DEVICE_SYMBOL"
+          echo "CONFIG_TARGET_sunxi_cortexa55_DEVICE_${DEVICE_SYMBOL}=y" >> .config
           make defconfig
 
       - name: Verify the correct target/device actually got selected
@@ -111,15 +131,16 @@ jobs:
           echo "==== Full sunxi TARGET/DEVICE lines in .config ===="
           grep -E "^CONFIG_TARGET_sunxi" .config || echo "none set!"
           echo
-          if ! grep -q "^CONFIG_TARGET_sunxi_armv82=y" .config; then
-            echo "::error::armv82 subtarget was NOT selected by defconfig — our .config symbol name is wrong. See the lines above for what actually got set, and the 'Discover real sunxi target/device Kconfig symbols' step output for the real symbol names."
+          if ! grep -q "^CONFIG_TARGET_sunxi_cortexa55=y" .config; then
+            echo "::error::cortexa55 subtarget was NOT selected by defconfig. See the lines above."
             exit 1
           fi
-          if ! grep -q "DEVICE_radxa_cubie-a5e=y" .config; then
-            echo "::error::radxa_cubie-a5e device was NOT selected by defconfig. See the lines above for what actually got set."
+          if ! grep -qE "^CONFIG_TARGET_sunxi_cortexa55_DEVICE_.*=y" .config; then
+            echo "::error::No cortexa55 device got selected by defconfig. See the lines above."
             exit 1
           fi
-          echo "Confirmed: armv82 subtarget + radxa_cubie-a5e device are selected."
+          echo "Confirmed: cortexa55 subtarget + a device are selected:"
+          grep -E "^CONFIG_TARGET_sunxi_cortexa55_DEVICE_.*=y" .config
 
       - name: Hardcode Local APK Feeds Out-of-the-box
         run: |
