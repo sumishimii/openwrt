@@ -150,6 +150,10 @@ jobs:
           path: logs/
           if-no-files-found: ignore
 
+      - name: List build output tree (debug)
+        if: always()
+        run: find bin/targets -maxdepth 3 2>/dev/null || echo "bin/targets does not exist"
+
       - name: Package all built ipk/apk packages for later manual install
         run: |
           PKG_DIR=$(find bin/targets -type d -name packages | head -n1)
@@ -167,7 +171,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Ultimate_Radxa_A5E_OpenWRT
-          path: bin/targets/sunxi/armv82/*
+          # Path is wildcarded because the subtarget folder name under
+          # bin/targets/sunxi/ has shifted before (cortexa53 -> armv82) and
+          # a hardcoded path here silently uploads nothing if it's wrong
+          # again, without failing the build.
+          path: bin/targets/sunxi/*/*
+          if-no-files-found: error
 
       - name: Upload All Core & Kernel Packages (zipped)
         uses: actions/upload-artifact@v4
