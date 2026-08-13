@@ -100,6 +100,8 @@ jobs:
 
           # 10. VLAN support (802.1q tagging + LuCI bridge VLAN filtering, DSA-based)
           echo "CONFIG_PACKAGE_kmod-8021q=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-bonding=y" >> .config
+          echo "CONFIG_PACKAGE_proto-bonding=y" >> .config
           echo "CONFIG_PACKAGE_luci-mod-network=y" >> .config
           echo "CONFIG_PACKAGE_luci-proto-vlan=y" >> .config
 
