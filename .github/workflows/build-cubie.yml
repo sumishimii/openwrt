@@ -25,6 +25,17 @@ jobs:
           repository: wigyori/openwrt
           ref: sunxi-a527-support
 
+      - name: Discover real sunxi target/device Kconfig symbols
+        run: |
+          echo "==== Subtargets defined in target/linux/sunxi/Makefile ===="
+          grep -n "SUBTARGETS" target/linux/sunxi/Makefile || echo "not found"
+          echo
+          echo "==== All TARGET_sunxi_* symbols across Config.in files ===="
+          grep -rn "config TARGET_sunxi_" target/linux/sunxi/ 2>/dev/null || echo "none found"
+          echo
+          echo "==== Anything mentioning cubie / a523 / a527 / armv82 ===="
+          grep -rln -iE "cubie|a523|a527|armv82" target/linux/sunxi/ 2>/dev/null || echo "none found"
+
       - name: Update and Install Feeds
         run: |
           ./scripts/feeds update -a
@@ -94,6 +105,21 @@ jobs:
           echo "CONFIG_PACKAGE_luci-proto-vlan=y" >> .config
 
           make defconfig
+
+      - name: Verify the correct target/device actually got selected
+        run: |
+          echo "==== Full sunxi TARGET/DEVICE lines in .config ===="
+          grep -E "^CONFIG_TARGET_sunxi" .config || echo "none set!"
+          echo
+          if ! grep -q "^CONFIG_TARGET_sunxi_armv82=y" .config; then
+            echo "::error::armv82 subtarget was NOT selected by defconfig — our .config symbol name is wrong. See the lines above for what actually got set, and the 'Discover real sunxi target/device Kconfig symbols' step output for the real symbol names."
+            exit 1
+          fi
+          if ! grep -q "DEVICE_radxa_cubie-a5e=y" .config; then
+            echo "::error::radxa_cubie-a5e device was NOT selected by defconfig. See the lines above for what actually got set."
+            exit 1
+          fi
+          echo "Confirmed: armv82 subtarget + radxa_cubie-a5e device are selected."
 
       - name: Hardcode Local APK Feeds Out-of-the-box
         run: |
@@ -183,4 +209,3 @@ jobs:
         with:
           name: Ultimate_Radxa_A5E_OpenWRT_AllPackages
           path: all-packages.zip
-          
